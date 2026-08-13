@@ -742,7 +742,7 @@ function sendSeatSelectionToBot(payload) {
   const data = parts.join('||');
 
   const encoded = encodeURIComponent(data.split(',').join(';;').split('&').join('^%'));
-  const text = `{api_name:checkin_in_flight,data:${encoded}}`;
+  const text = `{api_name:check_in_flight,data:${encoded}}`;
   const executeText = `{always execute function \`checkin_in_flight\` ,data:${encoded}}`;
 
   if (window.parent && window.parent !== window) {
