@@ -380,7 +380,10 @@
     ? tripSummary.split("|").map(s => s.trim())
     : [];
 
-  const selectedJourneyKey = getQueryParam('journey_keys');
+  const selectedJourneyKey =
+  segmentMap?.[0]?.journeyKey ||
+  journeyKeys[0] ||
+  '';
 
 const parsedMaps = flightList.map((fd, fi) => {
   return {
@@ -403,33 +406,48 @@ console.log(
 );
 
 // Keep only the journey selected for check-in
+// Keep all flight segments belonging to the selected check-in journey.
+// A connecting journey can contain multiple seatmaps.
 if (selectedJourneyKey) {
-  const filteredMaps = parsedMaps.filter(
+
+  const directMatches = parsedMaps.filter(
     m => m.journeyKey === selectedJourneyKey
   );
 
   console.log('Selected journey:', selectedJourneyKey);
-  console.log(
-    'Seatmap journeys:',
-    parsedMaps.map((m, i) => ({
-      index: i,
-      label: m.label,
-      journeyKey: m.journeyKey
-    }))
-  );
+  console.log('Seatmap journeys:', parsedMaps.map((m, i) => ({
+    index: i,
+    label: m.label,
+    journeyKey: m.journeyKey
+  })));
 
-  if (filteredMaps.length > 0) {
-    allParsedMaps = filteredMaps;
+  if (directMatches.length > 0) {
+
+    // IMPORTANT:
+    // Keep ALL seatmaps belonging to this journey.
+    // This handles connecting flights.
+    allParsedMaps = directMatches;
+
   } else {
-    // The API did not expose journeyKey on the seatmap.
-    // In check-in, the iframe was already created for one
-    // selected journey, so use only the FIRST seatmap.
+
+    // Seatmap API may not expose journeyKey per segment.
+    // segmentMap represents the selected check-in journey.
+    // Therefore use the number of segments in segmentMap
+    // instead of blindly taking only the first seatmap.
+
+    const selectedSegmentCount =
+      Array.isArray(segmentMap) && segmentMap.length > 0
+        ? segmentMap.length
+        : 1;
+
     console.warn(
-      '[SeatMap] Journey key not exposed by seatmap API. Using first seatmap for selected check-in journey.'
+      '[SeatMap] Journey key not exposed. Using seatmaps matching selected journey segment count:',
+      selectedSegmentCount
     );
 
-    allParsedMaps = [parsedMaps[0]];
+    allParsedMaps = parsedMaps.slice(0, selectedSegmentCount);
   }
+
 } else {
   allParsedMaps = parsedMaps;
 }
@@ -901,7 +919,7 @@ function resolveJourneyKeyForFlight(fd, fi) {
 
   // Fallback only when the seatmap response order matches
   // the journey_keys order.
-  return journeyKeys[fi] || null;
+  return directJourneyKey || null;
 }
   function init() {
     apiBaseUrl = getQueryParam('base_url') || '';
