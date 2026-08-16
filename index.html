@@ -167,9 +167,9 @@
 <div class="sector-bar">
   <div class="sector-info">
     <div class="sector-route" id="sector-route">Loading...</div>
-    <span class="sector-pill"  id="sector-flight">Flight details</span>
+    <span class="sector-pill" id="sector-flight">Flight details</span>
   </div>
-  <button class="btn-skip" onclick="skipSelection()">Skip</button>
+  <!-- Skip button removed -->
 </div>
 
 <!-- ③ PAX BAR -->
@@ -193,10 +193,7 @@
   <div class="seatmap-area">
     <div id="loading">Loading seat map…</div>
     <div id="error-box"></div>
-    <div id="file-picker-area">
-      <p>Could not auto-load the JSON. Pick the file manually:</p>
-      <input type="file" id="json-file-input" accept=".json">
-    </div>
+    <!-- JSON upload file-picker area removed -->
     <div class="aircraft-wrap" id="seatmap-root" style="display:none;"></div>
   </div>
 </div>
@@ -208,8 +205,8 @@
     <div class="price-link" onclick="toggleSummary()">View summary</div>
   </div>
   <div class="action-area">
-    <button class="btn-action btn-secondary" onclick="goBack()">Back</button>
-    <button class="btn-action btn-primary"   id="confirm-btn" onclick="handleConfirm()">Confirm seat</button>
+    <!-- Back/Cancel button removed -->
+    <button class="btn-action btn-primary" id="confirm-btn" onclick="handleConfirm()">Confirm seat</button>
   </div>
 </div>
 
@@ -241,12 +238,12 @@ let segmentMap = [];
 function showLoading(v) { document.getElementById('loading').style.display = v ? 'block' : 'none'; }
 function showError(html) {
   const b = document.getElementById('error-box');
-  b.style.display = 'block'; b.innerHTML = html;
-  document.getElementById('file-picker-area').style.display = 'block';
+  b.style.display = 'block'; 
+  b.innerHTML = html;
+  // Manual JSON file-picker upload area removed
 }
 function showMap() {
   document.getElementById('seatmap-root').style.display = 'block';
-  document.getElementById('file-picker-area').style.display = 'none';
 }
 function getQueryParam(name) {
   return new URLSearchParams(window.location.search).get(name) || '';
@@ -260,6 +257,17 @@ function buildSeatMapPayload(raw) {
   } else {
     flightList = [raw];
   }
+  const targetJourneyKey = getQueryParam('journey_keys');
+  if (targetJourneyKey) {
+    const filtered = flightList.filter(f => {
+      const jKey = f?.journeyKey || f?.seatMap?.journeyKey;
+      return jKey ? jKey === targetJourneyKey : true;
+    });
+    if (filtered.length > 0) {
+      flightList = filtered;
+    }
+  }
+
   return flightList;
 }
 function safeParseJSON(text) {
@@ -315,8 +323,7 @@ async function loadAndRenderFromApi() {
     showMap();
   } catch (err) {
     showLoading(false);
-    showError(`<strong>⚠ Could not load seat map</strong> ${err.message}<br><br>
-      <b>Common fixes:</b><br>• Verify the bot passed a valid auth token and API base URL<br>• Or use the file picker below`);
+    showError(`<strong>Unable to load seat map.</strong> Please try again later.`);
   }
 }
 
