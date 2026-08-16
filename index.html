@@ -250,22 +250,73 @@ function getQueryParam(name) {
 }
 function buildSeatMapPayload(raw) {
   let flightList = [];
+
   if (Array.isArray(raw?.data) && raw.data.length > 0) {
-    raw.data.forEach(item => flightList.push(item?.seatMapAvailability ?? item));
+    raw.data.forEach(item => {
+      flightList.push(item?.seatMapAvailability ?? item);
+    });
   } else if (raw?.seatMapAvailability) {
     flightList = [raw.seatMapAvailability];
   } else {
     flightList = [raw];
   }
+
   const targetJourneyKey = getQueryParam('journey_keys');
+
   if (targetJourneyKey) {
-    const filtered = flightList.filter(f => {
-      const jKey = f?.journeyKey || f?.seatMap?.journeyKey;
-      return jKey ? jKey === targetJourneyKey : true;
-    });
-    if (filtered.length > 0) {
-      flightList = filtered;
+    const segmentMapRaw = getQueryParam('segment_map');
+
+    let selectedSegment = null;
+
+    try {
+      const segments = JSON.parse(segmentMapRaw || '[]');
+      selectedSegment = segments.find(
+        s => s.journeyKey === targetJourneyKey
+      );
+    } catch (e) {
+      console.warn('Unable to parse segment_map', e);
     }
+
+    const filtered = flightList.filter(f => {
+      const root = f?.seatMap ?? f;
+
+      // 1. Direct journeyKey match
+      if (root?.journeyKey) {
+        return root.journeyKey === targetJourneyKey;
+      }
+
+      // 2. Match using route if journeyKey is not present
+      if (selectedSegment) {
+        const segments = root?.segments ?? root?.legs ?? [];
+
+        return segments.some(seg => {
+          const from = (
+            seg.departureStation ||
+            seg.origin ||
+            seg.from ||
+            ''
+          ).toUpperCase();
+
+          const to = (
+            seg.arrivalStation ||
+            seg.destination ||
+            seg.to ||
+            ''
+          ).toUpperCase();
+
+          return (
+            from === (selectedSegment.origin || '').toUpperCase() &&
+            to === (selectedSegment.destination || '').toUpperCase()
+          );
+        });
+      }
+
+      return false;
+    });
+
+    // IMPORTANT:
+    // Never fall back to the complete flightList.
+    flightList = filtered;
   }
 
   return flightList;
