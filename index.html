@@ -833,6 +833,109 @@ function init() {
     showError('<strong>⚠ Missing booking context</strong> The bot did not provide the required auth token and API base URL.');
   }
 }
+// Append to the bottom of the script block to complete the code
+function showTip(e, info, rowNum, col) {
+  if (!info) return;
+  const isOccupied = !info.assignable || info.avail === 0;
+  const priceText = info.price === 0 ? 'Free' : '₹' + info.price;
+  
+  tip.innerHTML = `
+    <strong>Seat ${rowNum}${col}</strong><br/>
+    Type: ${buildSeatDetail(info)}<br/>
+    Price: ${priceText}<br/>
+    Status: ${isOccupied ? 'Occupied' : 'Available'}
+  `;
+  tip.style.display = 'block';
+  moveTip(e);
+}
+
+function hideTip() {
+  tip.style.display = 'none';
+}
+
+function moveTip(e) {
+  tip.style.left = (e.clientX + 12) + 'px';
+  tip.style.top = (e.clientY + 12) + 'px';
+}
+
+function toggleSummary() {
+  let summaryStr = `PNR: ${pnr || 'N/A'}\n`;
+  perFlightSeats.forEach((flight, idx) => {
+    summaryStr += `\nFlight ${idx + 1}:\n`;
+    Object.keys(flight).forEach(paxId => {
+      const s = flight[paxId];
+      summaryStr += `  ${passengerNames[paxId - 1]}: ${s.seat ? s.seat + ' (' + currencyCode + ' ' + s.fee + ')' : 'No seat selected'}\n`;
+    });
+  });
+  alert(summaryStr);
+}
+
+function confirmSeat() {
+  const selectedSeats = [];
+  
+  allParsedMaps.forEach((mapObj, fIdx) => {
+    const jKey = mapObj.journeyKey || journeyKeys[fIdx] || '';
+    const seatsObj = perFlightSeats[fIdx] || {};
+    
+    Object.keys(seatsObj).forEach(paxId => {
+      const pIdx = parseInt(paxId) - 1;
+      const pKey = passengerKeys[pIdx] || '';
+      const seatInfo = seatsObj[paxId];
+      
+      if (seatInfo && seatInfo.unitKey) {
+        selectedSeats.push(`${jKey}|${pKey}|${seatInfo.unitKey}`);
+      }
+    });
+  });
+
+  if (selectedSeats.length === 0) {
+    alert('Please select at least one seat to proceed.');
+    return;
+  }
+
+  const payload = { selected_seats: selectedSeats.join(',') };
+
+  // Post selected seats back to parent container if rendered in an iframe/webview
+  if (window.parent && window.parent !== window) {
+    window.parent.postMessage(payload, '*');
+  } else if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.seatSelected) {
+    window.webkit.messageHandlers.seatSelected.postMessage(payload);
+  } else {
+    console.log('Selected Seats Payload:', payload);
+    alert('Seats confirmed successfully!\n' + selectedSeats.join('\n'));
+  }
+}
+
+function resolveJourneyKeyForFlight(fd, fi) {
+  const root = fd?.seatMap ?? fd;
+  return root?.journeyKey || journeyKeys[fi] || '';
+}
+
+// Read URL params and initialize interface upon script execution
+(function init() {
+  apiBaseUrl = getQueryParam('base_url');
+  authToken = getQueryParam('auth_token');
+  qpApiKey = getQueryParam('qp_bot_api_key');
+  qpSource = getQueryParam('qp_bot_source') || 'CHATBOTWEB';
+  customerNumber = getQueryParam('customer_number');
+  pnr = getQueryParam('pnr');
+  tripSummary = getQueryParam('trip_summary');
+  totalAmount = parseFloat(getQueryParam('total_amount')) || 0;
+  currencyCode = getQueryParam('currency') || 'INR';
+
+  const jKeysRaw = getQueryParam('journey_keys');
+  if (jKeysRaw) journeyKeys = jKeysRaw.split(',').map(s => s.trim());
+
+  const pKeysRaw = getQueryParam('passenger_keys');
+  if (pKeysRaw) passengerKeys = pKeysRaw.split(',').map(s => s.trim());
+
+  const segMapRaw = getQueryParam('segment_map');
+  if (segMapRaw) {
+    try { segmentMap = JSON.parse(segMapRaw); } catch(e) {}
+  }
+
+  loadAndRenderFromApi();
+})();
 
 init();
 </script>
