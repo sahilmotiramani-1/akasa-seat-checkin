@@ -252,19 +252,58 @@
   let flightList = [];
 
   if (Array.isArray(raw?.data) && raw.data.length > 0) {
-    raw.data.forEach(item => {
-      flightList.push(item?.seatMapAvailability ?? item);
+    raw.data.forEach((item, index) => {
+      const seatMap = item?.seatMapAvailability ?? item;
+
+      // Preserve journey/flight metadata from the API wrapper.
+      // The seatMapAvailability itself may not contain journeyKey.
+      flightList.push({
+        ...seatMap,
+
+        journeyKey:
+          item?.journeyKey ??
+          seatMap?.journeyKey ??
+          seatMap?.seatMap?.journeyKey ??
+          null,
+
+        flightReference:
+          item?.flightReference ??
+          seatMap?.flightReference ??
+          seatMap?.seatMap?.flightReference ??
+          null,
+
+        __seatMapIndex: index
+      });
     });
   } else if (raw?.seatMapAvailability) {
-    flightList = [raw.seatMapAvailability];
+    flightList = [{
+      ...raw.seatMapAvailability,
+      journeyKey:
+        raw?.journeyKey ??
+        raw?.seatMapAvailability?.journeyKey ??
+        null,
+      flightReference:
+        raw?.flightReference ??
+        raw?.seatMapAvailability?.flightReference ??
+        null,
+      __seatMapIndex: 0
+    }];
   } else {
-    flightList = [raw];
+    flightList = [{
+      ...raw,
+      __seatMapIndex: 0
+    }];
   }
 
-  // IMPORTANT:
-  // Do not filter here.
-  // The seat-map API response structure does not always expose
-  // journeyKey at the top level.
+  console.log(
+    '[SeatMap] Payload metadata:',
+    flightList.map(f => ({
+      index: f.__seatMapIndex,
+      journeyKey: f.journeyKey,
+      flightReference: f.flightReference
+    }))
+  );
+
   return flightList;
 }
   function safeParseJSON(text) {
@@ -370,20 +409,22 @@ if (selectedJourneyKey) {
   );
 
   if (filteredMaps.length === 0) {
-    console.error(
-      'Could not match selected journey to seatmap.',
-      {
-        selectedJourneyKey,
-        parsedMaps
-      }
-    );
+  console.error(
+    'Could not match selected journey to seatmap.',
+    {
+      selectedJourneyKey,
+      parsedMaps,
+      segmentMap,
+      journeyKeys
+    }
+  );
 
-    throw new Error(
-      `No seat map found for selected journey ${selectedJourneyKey}`
-    );
-  }
+  throw new Error(
+    `No seat map found for selected journey ${selectedJourneyKey}`
+  );
+}
 
-  allParsedMaps = filteredMaps;
+allParsedMaps = filteredMaps;
 } else {
   allParsedMaps = parsedMaps;
 }
@@ -827,59 +868,39 @@ switchToFlight(0);
   //   });
   // });
 function resolveJourneyKeyForFlight(fd, fi) {
-  const root = fd?.seatMap ?? fd;
-
-  const seg =
-    (root?.segments ??
-     root?.legs ??
-     root?.journeys ??
-     [])[0] || {};
-
-  // Handle both possible structures:
-  // 1. { origin, destination }
-  // 2. { designator: { origin, destination } }
-  const designator = seg?.designator || {};
-
-  const from = (
-    seg.departureStation ||
-    seg.origin ||
-    seg.from ||
-    designator.origin ||
-    ''
-  ).toUpperCase();
-
-  const to = (
-    seg.arrivalStation ||
-    seg.destination ||
-    seg.to ||
-    designator.destination ||
-    ''
-  ).toUpperCase();
+  const directJourneyKey =
+    fd?.journeyKey ??
+    fd?.seatMap?.journeyKey ??
+    fd?.seatMapAvailability?.journeyKey;
 
   console.log('Resolving seatmap:', {
     index: fi,
-    from,
-    to,
-    segmentMap
+    directJourneyKey,
+    flightReference:
+      fd?.flightReference ??
+      fd?.seatMap?.flightReference ??
+      fd?.seatMapAvailability?.flightReference,
+    segmentMap,
+    journeyKeys
   });
 
-  const match = segmentMap.find(m =>
-    (m.origin || '').toUpperCase() === from &&
-    (m.destination || '').toUpperCase() === to
-  );
-
-  if (match) {
-    return match.journeyKey;
+  // Best case: API returned journeyKey with this seatmap.
+  if (directJourneyKey) {
+    return directJourneyKey;
   }
 
-  // If segment_map exists but this route doesn't match,
-  // this seatmap belongs to another journey.
-  if (segmentMap.length > 0) {
-    return null;
+  // If the API does not return journeyKey, we need to
+  // determine it using the metadata available to us.
+  //
+  // For the current check-in flow, segmentMap contains
+  // only the selected journey.
+  if (segmentMap.length === 1 && segmentMap[0]?.journeyKey) {
+    return segmentMap[0].journeyKey;
   }
 
-  // Backward-compatible fallback when segment_map is unavailable.
-  return journeyKeys[fi] || journeyKeys[0] || '';
+  // Last fallback only when journey_keys contains a
+  // corresponding entry.
+  return journeyKeys[fi] || null;
 }
   function init() {
     apiBaseUrl = getQueryParam('base_url') || '';
