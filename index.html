@@ -370,6 +370,14 @@ if (selectedJourneyKey) {
   );
 
   if (filteredMaps.length === 0) {
+    console.error(
+      'Could not match selected journey to seatmap.',
+      {
+        selectedJourneyKey,
+        parsedMaps
+      }
+    );
+
     throw new Error(
       `No seat map found for selected journey ${selectedJourneyKey}`
     );
@@ -818,20 +826,25 @@ switchToFlight(0);
   //     showError(`<strong>⚠ Could not load seat map</strong> ${err.message}`);
   //   });
   // });
-  function resolveJourneyKeyForFlight(fd, fi) {
+function resolveJourneyKeyForFlight(fd, fi) {
   const root = fd?.seatMap ?? fd;
 
-  const seg = (
-    root?.segments ??
-    root?.legs ??
-    root?.journeys ??
-    []
-  )[0] || {};
+  const seg =
+    (root?.segments ??
+     root?.legs ??
+     root?.journeys ??
+     [])[0] || {};
+
+  // Handle both possible structures:
+  // 1. { origin, destination }
+  // 2. { designator: { origin, destination } }
+  const designator = seg?.designator || {};
 
   const from = (
     seg.departureStation ||
     seg.origin ||
     seg.from ||
+    designator.origin ||
     ''
   ).toUpperCase();
 
@@ -839,8 +852,16 @@ switchToFlight(0);
     seg.arrivalStation ||
     seg.destination ||
     seg.to ||
+    designator.destination ||
     ''
   ).toUpperCase();
+
+  console.log('Resolving seatmap:', {
+    index: fi,
+    from,
+    to,
+    segmentMap
+  });
 
   const match = segmentMap.find(m =>
     (m.origin || '').toUpperCase() === from &&
@@ -851,15 +872,13 @@ switchToFlight(0);
     return match.journeyKey;
   }
 
-  // IMPORTANT:
-  // If segment_map is available, an unmatched flight
-  // belongs to another journey. Do NOT assign the
-  // selected journey key to it.
+  // If segment_map exists but this route doesn't match,
+  // this seatmap belongs to another journey.
   if (segmentMap.length > 0) {
     return null;
   }
 
-  // Only use fallback when segment_map is unavailable.
+  // Backward-compatible fallback when segment_map is unavailable.
   return journeyKeys[fi] || journeyKeys[0] || '';
 }
   function init() {
