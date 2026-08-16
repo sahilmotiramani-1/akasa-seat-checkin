@@ -781,17 +781,17 @@ function confirmSeat() {
   setTimeout(() => sendSeatSelectionToBot(payload), 500);
 }
 
-document.getElementById('json-file-input').addEventListener('change', function() {
-  const file = this.files[0]; if (!file) return;
-  document.getElementById('error-box').style.display = 'none';
-  document.getElementById('file-picker-area').style.display = 'none';
-  file.text().then(text => {
-    const raw = safeParseJSON(text);
-    renderSeatMapData(buildSeatMapPayload(raw));
-  }).catch(err => {
-    showError(`<strong>⚠ Could not load seat map</strong> ${err.message}`);
-  });
-});
+// document.getElementById('json-file-input').addEventListener('change', function() {
+//   const file = this.files[0]; if (!file) return;
+//   document.getElementById('error-box').style.display = 'none';
+//   document.getElementById('file-picker-area').style.display = 'none';
+//   file.text().then(text => {
+//     const raw = safeParseJSON(text);
+//     renderSeatMapData(buildSeatMapPayload(raw));
+//   }).catch(err => {
+//     showError(`<strong>⚠ Could not load seat map</strong> ${err.message}`);
+//   });
+// });
 function resolveJourneyKeyForFlight(fd, fi) {
   const root = fd?.seatMap ?? fd;
   const seg = (root?.segments ?? root?.legs ?? root?.journeys ?? [])[0] || {};
