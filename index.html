@@ -360,6 +360,7 @@ if (selectedJourneyKey) {
   );
 
   console.log('Selected journey:', selectedJourneyKey);
+
   console.log(
     'Seatmap journeys:',
     parsedMaps.map(m => ({
@@ -368,12 +369,13 @@ if (selectedJourneyKey) {
     }))
   );
 
-  // Only filter if we actually found the selected journey.
-  // This prevents the seatmap from disappearing because of
-  // an unexpected API response structure.
-  allParsedMaps = filteredMaps.length > 0
-    ? filteredMaps
-    : parsedMaps;
+  if (filteredMaps.length === 0) {
+    throw new Error(
+      `No seat map found for selected journey ${selectedJourneyKey}`
+    );
+  }
+
+  allParsedMaps = filteredMaps;
 } else {
   allParsedMaps = parsedMaps;
 }
@@ -817,21 +819,49 @@ switchToFlight(0);
   //   });
   // });
   function resolveJourneyKeyForFlight(fd, fi) {
-    const root = fd?.seatMap ?? fd;
-    const seg = (root?.segments ?? root?.legs ?? root?.journeys ?? [])[0] || {};
-    const from = (seg.departureStation || seg.origin || seg.from || '').toUpperCase();
-    const to = (seg.arrivalStation || seg.destination || seg.to || '').toUpperCase();
+  const root = fd?.seatMap ?? fd;
 
-    const match = segmentMap.find(m =>
-      (m.origin || '').toUpperCase() === from &&
-      (m.destination || '').toUpperCase() === to
-    );
-    if (match) return match.journeyKey;
+  const seg = (
+    root?.segments ??
+    root?.legs ??
+    root?.journeys ??
+    []
+  )[0] || {};
 
-    // fallback for old data without segment_map
-    return journeyKeys[fi] || journeyKeys[0] || '';
+  const from = (
+    seg.departureStation ||
+    seg.origin ||
+    seg.from ||
+    ''
+  ).toUpperCase();
+
+  const to = (
+    seg.arrivalStation ||
+    seg.destination ||
+    seg.to ||
+    ''
+  ).toUpperCase();
+
+  const match = segmentMap.find(m =>
+    (m.origin || '').toUpperCase() === from &&
+    (m.destination || '').toUpperCase() === to
+  );
+
+  if (match) {
+    return match.journeyKey;
   }
 
+  // IMPORTANT:
+  // If segment_map is available, an unmatched flight
+  // belongs to another journey. Do NOT assign the
+  // selected journey key to it.
+  if (segmentMap.length > 0) {
+    return null;
+  }
+
+  // Only use fallback when segment_map is unavailable.
+  return journeyKeys[fi] || journeyKeys[0] || '';
+}
   function init() {
     apiBaseUrl = getQueryParam('base_url') || '';
     authToken = getQueryParam('auth_token') || '';
