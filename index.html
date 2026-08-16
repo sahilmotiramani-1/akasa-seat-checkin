@@ -392,6 +392,16 @@ const parsedMaps = flightList.map((fd, fi) => {
   };
 });
 
+console.log(
+  '[SeatMap] Parsed maps:',
+  parsedMaps.map((m, i) => ({
+    index: i,
+    journeyKey: m.journeyKey,
+    label: m.label,
+    flightNum: m.flightNum
+  }))
+);
+
 // Keep only the journey selected for check-in
 if (selectedJourneyKey) {
   const filteredMaps = parsedMaps.filter(
@@ -399,36 +409,30 @@ if (selectedJourneyKey) {
   );
 
   console.log('Selected journey:', selectedJourneyKey);
-
   console.log(
     'Seatmap journeys:',
-    parsedMaps.map(m => ({
+    parsedMaps.map((m, i) => ({
+      index: i,
       label: m.label,
       journeyKey: m.journeyKey
     }))
   );
 
-  if (filteredMaps.length === 0) {
-  console.error(
-    'Could not match selected journey to seatmap.',
-    {
-      selectedJourneyKey,
-      parsedMaps,
-      segmentMap,
-      journeyKeys
-    }
-  );
+  if (filteredMaps.length > 0) {
+    allParsedMaps = filteredMaps;
+  } else {
+    // The API did not expose journeyKey on the seatmap.
+    // In check-in, the iframe was already created for one
+    // selected journey, so use only the FIRST seatmap.
+    console.warn(
+      '[SeatMap] Journey key not exposed by seatmap API. Using first seatmap for selected check-in journey.'
+    );
 
-  throw new Error(
-    `No seat map found for selected journey ${selectedJourneyKey}`
-  );
-}
-
-allParsedMaps = filteredMaps;
+    allParsedMaps = [parsedMaps[0]];
+  }
 } else {
   allParsedMaps = parsedMaps;
 }
-
 perFlightSeats = allParsedMaps.map(() => {
   const seats = {};
   for (let p = 1; p <= numPax; p++) {
@@ -884,22 +888,19 @@ function resolveJourneyKeyForFlight(fd, fi) {
     journeyKeys
   });
 
-  // Best case: API returned journeyKey with this seatmap.
+  // If API gives us journeyKey, use it.
   if (directJourneyKey) {
     return directJourneyKey;
   }
 
-  // If the API does not return journeyKey, we need to
-  // determine it using the metadata available to us.
-  //
-  // For the current check-in flow, segmentMap contains
-  // only the selected journey.
-  if (segmentMap.length === 1 && segmentMap[0]?.journeyKey) {
-    return segmentMap[0].journeyKey;
-  }
+  // IMPORTANT:
+  // Do NOT return segmentMap[0].journeyKey here.
+  // segmentMap represents the SELECTED journey only,
+  // so assigning it to every seatmap causes both flights
+  // to appear as the selected journey.
 
-  // Last fallback only when journey_keys contains a
-  // corresponding entry.
+  // Fallback only when the seatmap response order matches
+  // the journey_keys order.
   return journeyKeys[fi] || null;
 }
   function init() {
