@@ -116,17 +116,31 @@
     .bottom-bar {
       background: #fff; border-top: 2px solid #e5e7eb;
       padding: 12px 24px; display: flex; align-items: center; justify-content: space-between;
-      position: sticky; bottom: 0; z-index: 100;
+      position: sticky; bottom: 0; z-index: 9999;
+      pointer-events: auto;
     }
     .price-info { display: flex; flex-direction: column; gap: 2px; }
     .price-total { font-size: 20px; font-weight: 800; color: #e8630a; }
     .price-link  { font-size: 11px; color: #888; cursor: pointer; text-decoration: underline; }
-    .action-area { display: flex; align-items: center; gap: 12px; }
-    .btn-action  { border: none; padding: 10px 26px; border-radius: 5px; font-size: 14px; font-weight: 700; cursor: pointer; transition: background 0.15s; white-space: nowrap; }
+    .action-area {
+      display: flex; align-items: center; gap: 12px;
+      position: relative; z-index: 10000; pointer-events: auto;
+    }
+    .btn-action {
+      border: none; padding: 10px 26px; border-radius: 5px;
+      font-size: 14px; font-weight: 700; cursor: pointer;
+      transition: background 0.15s; white-space: nowrap;
+      position: relative; z-index: 10001; pointer-events: auto;
+    }
     .btn-secondary { background: #fff; color: #e8630a; border: 1.5px solid #e8630a; }
     .btn-secondary:hover { background: #fff8f2; }
     .btn-primary   { background: #e8630a; color: #fff; }
     .btn-primary:hover   { background: #c95500; }
+    .btn-action:disabled {
+      opacity: 0.65;
+      cursor: not-allowed;
+      pointer-events: none;
+    }
 
     /* next-flight button (shown when on first tab and all pax have seats) */
     .btn-next { background: #1a73e8; color: #fff; }
@@ -867,17 +881,6 @@ switchToFlight(0);
 
   function goBack() { if (window.history.length > 1) window.history.back(); else alert('Use browser navigation to exit.'); }
   function skipSelection() { if (confirm('Skip seat selection?')) goBack(); }
-  function confirmSeat() {
-    const payload = buildSeatSelectionPayload();
-    if (!payload) { alert('Please select seats for passengers.'); return; }
-    const btn = document.getElementById('confirm-btn');
-    if (btn) {
-      btn.disabled = true;
-      btn.textContent = 'Submitting...';
-    }
-    setTimeout(() => sendSeatSelectionToBot(payload), 500);
-  }
-
   // document.getElementById('json-file-input').addEventListener('change', function() {
   //   const file = this.files[0]; if (!file) return;
   //   document.getElementById('error-box').style.display = 'none';
@@ -983,40 +986,25 @@ function resolveJourneyKeyForFlight(fd, fi) {
     alert(summaryStr);
   }
 
-  function confirmSeat() {
-    const selectedSeats = [];
-    
-    allParsedMaps.forEach((mapObj, fIdx) => {
-      const jKey = mapObj.journeyKey || journeyKeys[fIdx] || '';
-      const seatsObj = perFlightSeats[fIdx] || {};
-      
-      Object.keys(seatsObj).forEach(paxId => {
-        const pIdx = parseInt(paxId) - 1;
-        const pKey = passengerKeys[pIdx] || '';
-        const seatInfo = seatsObj[paxId];
-        
-        if (seatInfo && seatInfo.unitKey) {
-          selectedSeats.push(`${jKey}|${pKey}|${seatInfo.unitKey}`);
-        }
-      });
-    });
 
-    if (selectedSeats.length === 0) {
-      alert('Please select at least one seat to proceed.');
+  function confirmSeat() {
+    const payload = buildSeatSelectionPayload();
+
+    if (!payload) {
+      alert('Please select seats for passengers.');
       return;
     }
 
-    const payload = { selected_seats: selectedSeats.join(',') };
+    const btn = document.getElementById('confirm-btn');
 
-    // Post selected seats back to parent container if rendered in an iframe/webview
-    if (window.parent && window.parent !== window) {
-      window.parent.postMessage(payload, '*');
-    } else if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.seatSelected) {
-      window.webkit.messageHandlers.seatSelected.postMessage(payload);
-    } else {
-      console.log('Selected Seats Payload:', payload);
-      alert('Seats confirmed successfully!\n' + selectedSeats.join('\n'));
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Submitting...';
     }
+
+    setTimeout(() => {
+      sendSeatSelectionToBot(payload);
+    }, 500);
   }
 
   // Read URL params and initialize interface upon script execution
