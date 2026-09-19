@@ -213,8 +213,7 @@
 
 <div class="bottom-bar">
   <div class="price-info">
-    <div class="price-total" id="price-display">Loading...</div>
-    <div class="price-link" onclick="toggleSummary()">View summary</div>
+    <div class="price-total" id="price-display">INR 0</div>
   </div>
   <div class="action-area">
     <button class="btn-action btn-primary" id="confirm-btn" onclick="handleConfirm()">Confirm seat</button>
@@ -224,7 +223,7 @@
 <div class="seat-tooltip" id="tooltip"></div>
 
 <script>
-  const BASE_PRICE = 5805;
+  const BASE_PRICE = 0;
 
   let passengerNames = [];
   let numPax = 3;
@@ -593,10 +592,8 @@ switchToFlight(0);
       }
     }
 
-    // FIXED: Use totalAmount from query params if available
-    let totalFee = 0;
-    perFlightSeats.forEach(fs => { Object.values(fs).forEach(p => { totalFee += p.fee; }); });
-    const finalPrice = totalAmount > 0 ? totalAmount + totalFee : BASE_PRICE + totalFee;
+    // Check-in seat price starts at 0 and only includes seats selected here.
+    const finalPrice = getSelectedSeatAmount();
     document.getElementById('price-display').textContent = currencyCode + ' ' + finalPrice.toLocaleString('en-IN');
   }
 
@@ -1052,33 +1049,6 @@ function resolveJourneyKeyForFlight(fd, fi) {
   return directJourneyKey || null;
 }
   
-function toggleSummary() {
-  let summary = `PNR: ${pnr || 'N/A'}\n\n`;
-  let grandTotal = 0;
-
-  perFlightSeats.forEach((flight, idx) => {
-    summary += `Flight ${idx + 1}:\n`;
-
-    Object.keys(flight || {}).forEach(paxId => {
-      const seatInfo = flight[paxId] || {};
-      const passengerName = passengerNames[Number(paxId) - 1] || `Passenger ${paxId}`;
-
-      if (seatInfo.seat) {
-        const fee = Number(seatInfo.fee || 0);
-        grandTotal += fee;
-        summary += `  ${passengerName}: ${seatInfo.seat} (${currencyCode} ${fee.toLocaleString('en-IN')})\n`;
-      } else {
-        summary += `  ${passengerName}: No seat selected\n`;
-      }
-    });
-
-    summary += '\n';
-  });
-
-  summary += `Seat total: ${currencyCode} ${grandTotal.toLocaleString('en-IN')}`;
-  alert(summary);
-}
-
 function init() {
     apiBaseUrl = getQueryParam('base_url') || '';
     authToken = getQueryParam('auth_token') || '';
