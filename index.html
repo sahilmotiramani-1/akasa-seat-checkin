@@ -1101,10 +1101,11 @@ function init() {
 
 
   function confirmSeat() {
+    const missing = perFlightSeats.some(fs => Object.values(fs || {}).some(s => !s.seat));
     const payload = buildSeatSelectionPayload();
 
-    if (!payload) {
-      alert('Please select seats for passengers.');
+    if (!payload || missing) {
+      alert('Please select a seat for every passenger on every flight.');
       return;
     }
 
