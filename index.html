@@ -270,6 +270,15 @@
       flightList.push({
         ...seatMap,
 
+        // Fees are siblings of seatMapAvailability in the booking API response.
+        // Preserve them when flattening the seat-map wrapper.
+        fees: item?.fees ?? seatMap?.fees ?? {},
+        passengers:
+          item?.passengers ??
+          item?.passengerList ??
+          seatMap?.passengers ??
+          [],
+
         journeyKey:
           item?.journeyKey ??
           seatMap?.journeyKey ??
@@ -288,6 +297,8 @@
   } else if (raw?.seatMapAvailability) {
     flightList = [{
       ...raw.seatMapAvailability,
+      fees: raw?.fees ?? raw?.seatMapAvailability?.fees ?? {},
+      passengers: raw?.passengers ?? raw?.passengerList ?? [],
       journeyKey:
         raw?.journeyKey ??
         raw?.seatMapAvailability?.journeyKey ??
@@ -620,7 +631,8 @@ switchToFlight(0);
   }
 
   function parseSeatMap(data) {
-  const root = data?.seatMap ?? data;
+  const availability = data?.seatMapAvailability ?? data;
+  const root = availability?.seatMap ?? availability;
   const decks = root?.decks ?? {};
   const deck1 = decks['1'] ?? Object.values(decks)[0] ?? {};
   const allUnits = [];
@@ -629,11 +641,23 @@ switchToFlight(0);
   });
   if (allUnits.length === 0) throw new Error('No seat units found in JSON.');
 
-  const fees = {};
+  // Seat display price is the SFE seat fee only.
+  // C27/S27 are tax components and must not be added to the seat-map price.
+  // Missing SFE entries represent a free seat (₹0).
+  const fees = Object.create(null);
   Object.values(data?.fees ?? {}).forEach(paxFees => {
-    Object.values(paxFees?.groups ?? {}).forEach(grp => {
-      const sfe = (grp?.fees ?? []).flatMap(f => f?.serviceCharges ?? []).find(s => s.code === 'SFE');
-      if (sfe != null && !(grp.group in fees)) fees[grp.group] = sfe.amount;
+    Object.entries(paxFees?.groups ?? {}).forEach(([groupKey, grp]) => {
+      const groupId = String(grp?.group ?? groupKey ?? '');
+      if (!groupId || Object.prototype.hasOwnProperty.call(fees, groupId)) return;
+
+      const sfeFee = (grp?.fees ?? []).find(f => String(f?.code ?? '').toUpperCase() === 'SFE');
+      const sfeCharge = (sfeFee?.serviceCharges ?? []).find(
+        charge => String(charge?.code ?? charge?.ticketCode ?? '').toUpperCase() === 'SFE'
+      );
+
+      // Do not add C27/S27 or any other tax line to the seat's SFE price.
+      const amount = Number(sfeCharge?.amount);
+      fees[groupId] = Number.isFinite(amount) && amount > 0 ? amount : 0;
     });
   });
 
@@ -706,7 +730,10 @@ switchToFlight(0);
       avail: isOpen ? 1 : 0,
       assignable: !!u.assignable && isOpen,
       group: u.group ?? 0,
-      price: fees[u.group] ?? 0,
+      price: (() => {
+        const amount = Number(fees[String(u.group ?? 0)] ?? 0);
+        return Number.isFinite(amount) && amount > 0 ? amount : 0;
+      })(),
       isWindow: hasProp(u, 'WINDOW'),
       isAisle: hasProp(u, 'AISLE'),
       isLeg: hasProp(u, 'LEGROOM'),
@@ -827,6 +854,16 @@ function seatFaceClasses(info) {
   return out;
 }
 
+function getSeatPrice(info) {
+  const amount = Number(info?.price ?? 0);
+  return Number.isFinite(amount) && amount > 0 ? amount : 0;
+}
+
+function formatSeatPrice(info) {
+  const amount = getSeatPrice(info);
+  return amount === 0 ? 'Free' : '₹' + amount.toLocaleString('en-IN');
+}
+
 function buildSeat(info, rowNum, colLetter) {
   const div = document.createElement('div');
   div.className = 'seat';
@@ -841,11 +878,11 @@ function buildSeat(info, rowNum, colLetter) {
     div.title = `${info.des} — Occupied`;
   } else {
     div.classList.add(...seatFaceClasses(info));
-    div.textContent = Number(info.price) === 0 ? 'Free' : '₹' + Number(info.price).toLocaleString('en-IN');
+    div.textContent = formatSeatPrice(info);
   }
 
   div.dataset.rowCol = `${rowNum}${colLetter}`;
-  div.dataset.price = info.price;
+  div.dataset.price = String(getSeatPrice(info));
   div.dataset.isLeg = info.isLeg ? '1' : '0';
   div.dataset.isExit = info.isExit ? '1' : '0';
   div.dataset.isRecliner = info.isRecliner ? '1' : '0';
@@ -882,7 +919,12 @@ function handleSeatClick(div, info, rowNum, colLetter) {
     refreshSeatVisuals(); updateUIForFlight(); updateFlightTabs(); return;
   }
 
-  seats[currentPaxId] = { seat: id, fee: info.price, detail: buildSeatDetail(info), unitKey: info.key };
+  seats[currentPaxId] = {
+    seat: id,
+    fee: getSeatPrice(info),
+    detail: buildSeatDetail(info),
+    unitKey: info.key
+  };
 
   const nextUnseated = Object.keys(seats).map(Number).find(p => p > currentPaxId && !seats[p]?.seat);
   if (nextUnseated) currentPaxId = nextUnseated;
@@ -925,7 +967,10 @@ function refreshSeatVisuals() {
         isNonReclining: seat.dataset.isNonReclining === '1',
         price: +seat.dataset.price
       }));
-      seat.textContent = +seat.dataset.price === 0 ? 'Free' : '₹' + (+seat.dataset.price).toLocaleString('en-IN');
+      const amount = Number(seat.dataset.price);
+      seat.textContent = Number.isFinite(amount) && amount > 0
+        ? '₹' + amount.toLocaleString('en-IN')
+        : 'Free';
     }
   });
 }
@@ -944,7 +989,7 @@ function showTip(e, info, r, c) {
   if (info.noChild) lines.push('No children');
   if (info.isDisab) lines.push('Accessibility seat');
   if (isPreferredSeat(info, currentPaxId)) lines.push('Preferred seat');
-  lines.push(info.avail === 0 ? 'Occupied' : 'Price: ' + (info.price === 0 ? 'Free' : '₹' + info.price));
+  lines.push(info.avail === 0 ? 'Occupied' : 'Price: ' + formatSeatPrice(info));
   tip.innerHTML = lines.join('<br>'); tip.style.display = 'block'; moveTip(e);
 }
 function moveTip(e) { tip.style.left = (e.clientX + 14) + 'px'; tip.style.top = (e.clientY + 14) + 'px'; }
