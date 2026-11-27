@@ -341,7 +341,7 @@
       'QP-BOT-API-KEY': qpApiKey,
       'QP-BOT-SOURCE': qpSource
     };
-    const response = await fetch(`${apiBaseUrl}/api/ibe/agents/seatmap`, { headers });
+    const response = await fetch(`${apiBaseUrl}/api/ibe/agents/seatmap`, { headers, referrerPolicy: 'no-referrer' });
     if (!response.ok) throw new Error(`Seatmap API failed (${response.status})`);
     return response.json();
   }
@@ -353,7 +353,7 @@
       'QP-BOT-API-KEY': qpApiKey,
       'QP-BOT-SOURCE': qpSource
     };
-    const response = await fetch(`${apiBaseUrl}/api/ibe/agents/preferred-seats?customerNumber=${encodeURIComponent(customerNumber)}`, { headers });
+    const response = await fetch(`${apiBaseUrl}/api/ibe/agents/preferred-seats?customerNumber=${encodeURIComponent(customerNumber)}`, { headers, referrerPolicy: 'no-referrer' });
     if (!response.ok) return [];
     const json = await response.json();
     return Array.isArray(json?.data) ? json.data : [];
@@ -1095,7 +1095,7 @@ function resolveJourneyKeyForFlight(fd, fi) {
 }
   
 function init() {
-    apiBaseUrl = getQueryParam('base_url') || '';
+    apiBaseUrl = ''; // calls go through the vercel.json rewrite (no Origin/Referer)
     authToken = getQueryParam('auth_token') || '';
     qpApiKey = getQueryParam('qp_bot_api_key') || '';
     qpSource = getQueryParam('qp_bot_source') || 'CHATBOTWEB';
@@ -1113,7 +1113,7 @@ function init() {
     totalAmount = amountStr ? parseFloat(amountStr) : 0;
     currencyCode = getQueryParam('currency') || 'INR';
 
-    if (apiBaseUrl && authToken) {
+    if (authToken) {
       loadAndRenderFromApi();
     } else {
       showError('<strong>⚠ Missing booking context</strong> The bot did not provide the required auth token and API base URL.');
